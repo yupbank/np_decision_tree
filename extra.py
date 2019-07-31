@@ -1,41 +1,14 @@
 from functools import partial
-import numpy as np
-from itertools import groupby
-from collections import namedtuple
+
 from sklearn.datasets import make_regression
+import numpy as np
 
-import time
-
-
-def timeit(func):
-    def _(*args, **kwargs):
-        start = time.time()
-        res = func(*args, **kwargs)
-        end = time.time() - start
-        print('Func: %s, runtime: %.6f' % (func.__name__, end))
-        return res
-    return _
-
-
-Mask = namedtuple('DataMask', 'row column')
-Task = namedtuple('Task', 'mask parent is_left depth')
-BestSplit = namedtuple(
-        'BestSplit', 'mask attribute threshold constant_attrs')
-Tree = namedtuple('Tree', 'child_left child_right features thresholds value')
+from utils import timeit
+from base import Mask, Task, BestSplit, Tree, is_leaf
 
 
 def variance(y):
     return np.var(y)
-
-
-def is_leaf(mask, y, min_sample_leaf=10):
-    if np.sum(mask.row) < min_sample_leaf:
-        return True
-    if np.unique(y[mask.row]).size <= 1:
-        return True
-    if np.sum(mask.column) == 0:
-        return True
-    return False
 
 
 def score_fn(y, masks, method=variance):
@@ -65,7 +38,7 @@ def random_split(X, y):
     constant_attr_mask = min_max_value[0] == min_max_value[1]
     min_max_value = min_max_value[:, ~constant_attr_mask]
     thresholds = np.random.uniform(min_max_value[0], min_max_value[1])
-    left_masks = X < thresholds
+    left_masks = X <= thresholds
 
     scores = score_fn(y, left_masks)
 
@@ -86,14 +59,15 @@ def _compelete_split(Xf, y):
     cum_count = np.cumsum(count)
 
     left_sums = np.cumsum(y_sum)
-    total_sum, left_sums = left_sums[-1], left_sums[:-1]
-    total_count, left_counts = cum_count[-1], cum_count[:-1]
+    total_sum, left_sums = left_sums[-1], left_sums[1:-1]
+    total_count, left_counts = cum_count[-1], cum_count[1:-1]
 
     surrogate = np.square(left_sums)/left_counts + \
         np.square(total_sum-left_sums)/(total_count-left_counts)
-
+    if surrogate.size == 0:
+        return -1.0, -1.0
     index = np.argmax(surrogate)
-    threshold = thresholds[index]
+    threshold = thresholds[index+1]
 
     improvement = (surrogate[index] -
                    np.square(total_sum)/total_count)/total_count
@@ -123,7 +97,7 @@ def find_best_split_v2(X, y, candidate_attributes, max_feature=100, min_improvem
     if best_improvement < min_improvement:
         return None
     else:
-        return BestSplit(Xfs[:, best_index] < best_threshold, attributes[best_index], best_threshold, new_constant_attrs)
+        return BestSplit(Xfs[:, best_index] <= best_threshold, attributes[best_index], best_threshold, new_constant_attrs)
 
 
 def find_best_split(X, y, candidate_attributes,  max_feature=100, min_improvement=0.01):
@@ -138,7 +112,7 @@ def find_best_split(X, y, candidate_attributes,  max_feature=100, min_improvemen
     if score < min_improvement:
         return None
     else:
-        return BestSplit(Xfs[:, best_index] < threshold,
+        return BestSplit(Xfs[:, best_index] <= threshold,
                          attributes[best_index],
                          threshold,
                          new_constant_attrs)
@@ -153,11 +127,11 @@ def split_mask(mask, best_split):
     left_row_mask[row_indexes[~best_split.mask]] = 0
     right_row_mask[row_indexes[best_split.mask]] = 0
     return (
-            Mask(left_row_mask,
-                 column_mask),
-            Mask(right_row_mask,
-                 column_mask)
-            )
+        Mask(left_row_mask,
+             column_mask),
+        Mask(right_row_mask,
+             column_mask)
+    )
 
 
 def leaf_from_data(y):
@@ -200,11 +174,10 @@ def build_an_extra_tree(X, y, max_depth=2, max_feature=100, min_improvement=0.01
             best_split = find_best_split_v2(Xf,
                                             yf,
                                             candidate_attributes=np.flatnonzero(
-                                             task.mask.column),
+                                                task.mask.column),
                                             max_feature=max_feature,
                                             min_improvement=min_improvement)
             if best_split is None:
-                print(yf.shape, yf[best_split.mask].size)
                 value[node_id] = leaf_from_data(yf)
             else:
                 thresholds[node_id] = best_split.threshold
@@ -245,9 +218,9 @@ def inference(data, clf):
 @timeit
 def main():
     from sklearn.metrics import regression
-    from sklearn.tree import ExtraTreeRegressor
-    np.random.seed(20)
-    x, y = make_regression(n_samples=1000, n_informative=10)
+    from sklearn.tree import ExtraTreeRegressor, DecisionTreeRegressor
+    np.random.seed(10)
+    x, y = make_regression(n_samples=10000, n_informative=40)
     t = build_an_extra_tree(x, y, max_depth=10,
                             max_feature=9, min_improvement=0.000001)
     y_hat = inference(x, t)
@@ -258,7 +231,8 @@ def main():
 
     @timeit
     def fit(x, y):
-        clf = ExtraTreeRegressor(
+        #clf = ExtraTreeRegressor(
+        clf = DecisionTreeRegressor(
             max_depth=10, max_features=10, min_impurity_decrease=0.000001)
         clf.fit(x, y)
         return clf
