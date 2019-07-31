@@ -1,8 +1,8 @@
 import numpy as np
-from tree import DecisionTree
-from base import Mask, Task, is_leaf
-from decision import find_best_split_v2 as greedy
-from extra import leaf_from_data
+from decision_tree.tree import DecisionTree
+from decision_tree.base import Mask, Task, is_leaf
+from decision_tree.decision import find_best_split_v2 as greedy
+from decision_tree.extra import leaf_from_data
 
 
 def init_mask(n_row, n_col):

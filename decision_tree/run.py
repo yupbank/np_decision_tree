@@ -3,8 +3,8 @@ from sklearn.metrics import regression
 from sklearn.datasets import make_regression
 from sklearn.tree import ExtraTreeRegressor, DecisionTreeRegressor
 
-from utils import timeit, inference
-from tree_builder import build_tree
+from decision_tree.utils import timeit, inference
+from decision_tree.tree_builder import build_tree
 
 
 @timeit

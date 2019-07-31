@@ -1,10 +1,9 @@
 from functools import partial
 
-from sklearn.datasets import make_regression
 import numpy as np
+from sklearn.datasets import make_regression
 
-from utils import timeit
-from base import Mask, Task, BestSplit, Tree, is_leaf
+from decision_tree.base import BestSplit
 
 
 def variance(y):

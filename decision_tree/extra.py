@@ -3,8 +3,8 @@ from functools import partial
 from sklearn.datasets import make_regression
 import numpy as np
 
-from utils import timeit
-from base import Mask, Task, BestSplit, Tree, is_leaf
+from decision_tree.utils import timeit
+from decision_tree.base import Mask, Task, BestSplit, Tree, is_leaf
 
 
 def variance(y):
