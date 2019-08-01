@@ -4,8 +4,7 @@ import numpy as np
 from decision_tree.tree import DecisionTree
 from decision_tree.base import Mask, Task, BestSplit, is_leaf
 from decision_tree.utils import timeit
-from decision_tree.extra import random_split
-from decision_tree.decision import greedy_split
+from decision_tree.strategy import random_split, greedy_split
 
 
 def init_mask(n_row, n_col):
