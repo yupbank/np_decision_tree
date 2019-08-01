@@ -4,7 +4,7 @@ from sklearn.datasets import make_regression
 from sklearn.tree import ExtraTreeRegressor, DecisionTreeRegressor
 
 from decision_tree.utils import timeit, inference
-from decision_tree.tree_builder import build_tree, random_split, greedy_split
+from decision_tree.tree_builder import build_tree, random_split, random_split_v2, greedy_split
 
 
 @timeit
@@ -16,6 +16,11 @@ def main():
                    max_feature=100, min_improvement=0.000001, split_method=random_split)
     y_hat = inference(x, t)
     print("my result random", regression.mean_squared_error(y_hat, y))
+
+    t = build_tree(x, y, max_depth=10,
+                   max_feature=100, min_improvement=0.000001, split_method=random_split_v2)
+    y_hat = inference(x, t)
+    print("my result random v2", regression.mean_squared_error(y_hat, y))
 
     t = build_tree(x, y, max_depth=10,
                    max_feature=100, min_improvement=0.000001, split_method=greedy_split)

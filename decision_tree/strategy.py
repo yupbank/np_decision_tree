@@ -25,6 +25,14 @@ def cal_gini_improvement(y, masks, num_class=2):
     return (left_squared_sum/left_class_count + right_squared_sum/right_class_count)/total_count
 
 
+def random_split_v2(X, y, cal_improvements=cal_variance_improvements):
+    thresholds = np.random.uniform(np.min(X, axis=0), np.max(X, axis=0))
+    left_masks = X <= thresholds
+    improvements = cal_improvements(y, left_masks)
+    best_index = np.argmax(improvements)
+    return best_index, thresholds[best_index], improvements[best_index], np.zeros(X.shape[1], dtype=np.bool)
+
+
 def random_split(X, y, cal_improvements=cal_variance_improvements):
     """
     Randomly pick a threshold among  all features for maximum variance reduction
