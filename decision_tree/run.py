@@ -4,29 +4,24 @@ from sklearn.datasets import make_regression
 from sklearn.tree import ExtraTreeRegressor, DecisionTreeRegressor
 
 from decision_tree.utils import timeit, inference
-from decision_tree.tree_builder import build_tree, random_split, greedy_split, greedy_split_v2
+from decision_tree.tree_builder import build_tree, random_split, greedy_split
 
 
 @timeit
 def main():
-    np.random.seed(10)
-    x, y = make_regression(n_samples=10000, n_informative=20)
+    np.random.seed(20)
+    x, y = make_regression(n_samples=10000, n_informative=30)
+
+    t = build_tree(x, y, max_depth=10,
+                   max_feature=100, min_improvement=0.000001, split_method=random_split)
+    y_hat = inference(x, t)
+    print("my result random", regression.mean_squared_error(y_hat, y))
 
     t = build_tree(x, y, max_depth=10,
                    max_feature=100, min_improvement=0.000001, split_method=greedy_split)
     y_hat = inference(x, t)
     print("my result", regression.mean_squared_error(y_hat, y))
 
-    t = build_tree(x, y, max_depth=10,
-                   max_feature=100, min_improvement=0.000001, split_method=greedy_split_v2)
-    y_hat = inference(x, t)
-    print("my result v2", regression.mean_squared_error(y_hat, y))
-
-    t = build_tree(x, y, max_depth=10,
-                   max_feature=100, min_improvement=0.000001, split_method=random_split)
-    y_hat = inference(x, t)
-    print("my result random", regression.mean_squared_error(y_hat, y))
-#
     @timeit
     def fit(x, y):
         clf = DecisionTreeRegressor(
@@ -37,7 +32,6 @@ def main():
 
     clf = fit(x, y)
     #print ("sklearn predicted", clf.predict(x))
-    print("sklearn result", regression.mean_squared_error(clf.predict(x), y))
     print("sklearn result", regression.mean_squared_error(inference(x, clf), y))
     return x, y, clf, t
 
