@@ -1,13 +1,20 @@
+from functools import partial
+
 import numpy as np
 from decision_tree.tree import DecisionTree
-from decision_tree.base import Mask, Task, is_leaf
-from decision_tree.decision import find_best_split_v2 as greedy
-from decision_tree.extra import leaf_from_data
+from decision_tree.base import Mask, Task, BestSplit, is_leaf
+from decision_tree.utils import timeit
+from decision_tree.extra import random_split
+from decision_tree.decision import greedy_split, greedy_split_v2
 
 
 def init_mask(n_row, n_col):
     return Mask(np.ones(n_row, dtype=np.bool),
                 np.ones(n_col, dtype=np.bool))
+
+
+def leaf_from_data(y):
+    return np.mean(y)
 
 
 def split_mask(mask, Xf, best_split):
@@ -29,15 +36,27 @@ def split_mask(mask, Xf, best_split):
     )
 
 
-find_best_split = greedy
+def find_best_split(X, y, candidate_attributes, max_feature=100, split_method=random_split):
+    if candidate_attributes.size <= max_feature:
+        attributes = candidate_attributes
+    else:
+        attributes = np.random.permutation(candidate_attributes)[:max_feature]
+    Xfs = X[:, attributes]
+    best_index, best_threshold, best_improvement, constant_attr_mask = split_method(
+        Xfs, y)
+    new_constant_attrs = attributes[constant_attr_mask]
+    return BestSplit(attributes[best_index], best_threshold, new_constant_attrs, best_improvement)
 
 
+@timeit
 def build_tree(X, y,
                max_depth=2,
                max_feature=100,
                min_improvement=0.01,
-               min_sample_leaf=1):
-    max_node = 2**(max_depth+1)
+               min_sample_leaf=1,
+               split_method=greedy_split):
+    best_split_method = partial(find_best_split, split_method=split_method)
+    max_node = 2 ** (max_depth + 1)
     tree = DecisionTree(max_node)
     mask = init_mask(*X.shape)
     tasks = [Task(mask, parent=None, is_left=True, depth=0)]
@@ -50,12 +69,11 @@ def build_tree(X, y,
         if is_leaf(task.mask, yf, min_sample_leaf) or task.depth >= max_depth:
             tree.add_leaf(node_id, leaf_from_data(yf))
         else:
-            best_split = find_best_split(Xf,
-                                         yf,
-                                         candidate_attributes=np.flatnonzero(
-                                             task.mask.column),
-                                         max_feature=max_feature,
-                                         min_improvement=min_improvement)
+            best_split = best_split_method(Xf,
+                                           yf,
+                                           candidate_attributes=np.flatnonzero(
+                                               task.mask.column),
+                                           max_feature=max_feature)
             if best_split.improvement < min_improvement:
                 tree.add_leaf(node_id, leaf_from_data(yf))
             else:
@@ -65,8 +83,8 @@ def build_tree(X, y,
                                                    Xf,
                                                    best_split)
                 tasks.append(
-                    Task(right_mask, parent=node_id, is_left=False, depth=task.depth+1))
+                    Task(right_mask, parent=node_id, is_left=False, depth=task.depth + 1))
                 tasks.append(
-                    Task(left_mask, parent=node_id, is_left=True, depth=task.depth+1))
+                    Task(left_mask, parent=node_id, is_left=True, depth=task.depth + 1))
 
     return tree.final()

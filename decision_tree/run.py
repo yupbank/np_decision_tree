@@ -4,25 +4,33 @@ from sklearn.datasets import make_regression
 from sklearn.tree import ExtraTreeRegressor, DecisionTreeRegressor
 
 from decision_tree.utils import timeit, inference
-from decision_tree.tree_builder import build_tree
+from decision_tree.tree_builder import build_tree, random_split, greedy_split, greedy_split_v2
 
 
 @timeit
 def main():
-    np.random.seed(20)
-    x, y = make_regression(n_samples=10000, n_informative=40)
+    np.random.seed(10)
+    x, y = make_regression(n_samples=10000, n_informative=20)
+
     t = build_tree(x, y, max_depth=10,
-                   max_feature=100, min_improvement=0.000001)
+                   max_feature=100, min_improvement=0.000001, split_method=greedy_split)
     y_hat = inference(x, t)
-    #print(t)
-    #print("truth", y)
-    #print("we predicted", y_hat)
     print("my result", regression.mean_squared_error(y_hat, y))
 
+    t = build_tree(x, y, max_depth=10,
+                   max_feature=100, min_improvement=0.000001, split_method=greedy_split_v2)
+    y_hat = inference(x, t)
+    print("my result v2", regression.mean_squared_error(y_hat, y))
+
+    t = build_tree(x, y, max_depth=10,
+                   max_feature=100, min_improvement=0.000001, split_method=random_split)
+    y_hat = inference(x, t)
+    print("my result random", regression.mean_squared_error(y_hat, y))
+#
     @timeit
     def fit(x, y):
-        #clf = ExtraTreeRegressor(
         clf = DecisionTreeRegressor(
+        #clf = DecisionTreeRegressor(
             max_depth=10, max_features=100, min_impurity_decrease=0.000001)
         clf.fit(x, y)
         return clf
