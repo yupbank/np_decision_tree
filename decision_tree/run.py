@@ -25,14 +25,28 @@ def main():
     @timeit
     def fit(x, y):
         clf = DecisionTreeRegressor(
-        #clf = DecisionTreeRegressor(
+            #clf = DecisionTreeRegressor(
             max_depth=10, max_features=100, min_impurity_decrease=0.000001)
         clf.fit(x, y)
         return clf
 
     clf = fit(x, y)
     #print ("sklearn predicted", clf.predict(x))
-    print("sklearn result", regression.mean_squared_error(inference(x, clf), y))
+    print("greedy sklearn result",
+          regression.mean_squared_error(inference(x, clf), y))
+
+    @timeit
+    def fit(x, y):
+        clf = ExtraTreeRegressor(
+            #clf = DecisionTreeRegressor(
+            max_depth=10, max_features=100, min_impurity_decrease=0.000001)
+        clf.fit(x, y)
+        return clf
+
+    clf = fit(x, y)
+    #print ("sklearn predicted", clf.predict(x))
+    print("random sklearn result",
+          regression.mean_squared_error(inference(x, clf), y))
     return x, y, clf, t
 
 

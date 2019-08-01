@@ -30,16 +30,12 @@ def random_split(X, y, cal_improvements=cal_variance_improvements):
     Randomly pick a threshold among  all features for maximum variance reduction
     """
     indexes = np.argsort(X, axis=0)
-    min_max_index = indexes[[0, -1]]
-    auxiliary_col, _ = np.meshgrid(np.arange(X.shape[1]), [0, 1])
-    min_max_value = X[min_max_index, auxiliary_col]
-    constant_attr_mask = min_max_value[0] == min_max_value[1]
-    min_max_value = min_max_value[:, ~constant_attr_mask]
-    thresholds = np.random.uniform(min_max_value[0], min_max_value[1])
-    left_masks = X <= thresholds
+    cutting_rank = np.random.choice(X.shape[0]-1, X.shape[1])
+    left_masks = indexes <= cutting_rank
     improvements = cal_improvements(y, left_masks)
     best_index = np.argmax(improvements)
-    return best_index, thresholds[best_index], improvements[best_index], constant_attr_mask
+    data_row_index = indexes[cutting_rank[best_index], best_index]
+    return best_index, X[data_row_index, best_index], improvements[best_index], np.zeros(X.shape[1], dtype=np.bool)
 
 
 def greedy_split(X, y):
