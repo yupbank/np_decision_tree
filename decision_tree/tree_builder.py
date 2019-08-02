@@ -1,10 +1,9 @@
 from functools import partial
 
 import numpy as np
-from decision_tree.tree import DecisionTree
-from decision_tree.base import Mask, Task, BestSplit, is_leaf
+from decision_tree.base import Mask, Task, BestSplit, is_leaf, DecisionTree
 from decision_tree.utils import timeit
-from decision_tree.strategy import random_split, greedy_split, random_split_v2
+from decision_tree.strategy import random_split, greedy_split, random_split_v2, random_classify
 
 
 def init_mask(n_row, n_col):
@@ -12,8 +11,12 @@ def init_mask(n_row, n_col):
                 np.ones(n_col, dtype=np.bool))
 
 
-def leaf_from_data(y):
+def leaf_from_data_regression(y):
     return np.mean(y)
+
+
+def leaf_from_data_classification(y):
+    return np.argmax(y.sum(axis=0))
 
 
 def split_mask(mask, Xf, best_split):
@@ -53,7 +56,8 @@ def build_tree(X, y,
                max_feature=100,
                min_improvement=0.01,
                min_sample_leaf=1,
-               split_method=greedy_split):
+               split_method=greedy_split,
+               leaf_from_data=leaf_from_data_regression):
     best_split_method = partial(find_best_split, split_method=split_method)
     max_node = 2 ** (max_depth + 1)
     tree = DecisionTree(max_node)
@@ -87,3 +91,26 @@ def build_tree(X, y,
                     Task(left_mask, parent=node_id, is_left=True, depth=task.depth + 1))
 
     return tree.final()
+
+
+def build_regression_tree(X, y,
+                          max_depth=2,
+                          max_feature=100,
+                          min_improvement=0.01,
+                          min_sample_leaf=1,
+                          split_method=random_split,
+                          leaf_from_data=leaf_from_data_regression):
+    return build_tree(X, y, max_depth, max_feature, min_improvement, min_sample_leaf, split_method, leaf_from_data)
+
+
+def build_classification_tree(X, y,
+                              max_depth=2,
+                              max_feature=100,
+                              min_improvement=0.01,
+                              min_sample_leaf=1,
+                              split_method=random_classify,
+                              leaf_from_data=leaf_from_data_classification,
+                              max_classes=2):
+    encoding = np.eye(max_classes)
+    ye = encoding[y]
+    return build_tree(X, ye, max_depth, max_feature, min_improvement, min_sample_leaf, split_method, leaf_from_data)
