@@ -54,8 +54,30 @@ def surrogate_gini_improvements(left_class_counts, left_counts, total_class_coun
     )
 
 
-def y_to_ratio_sum(y):
-    return np.sum(y.sum(0)/y.sum())
+def surrogate_p_at_k_improvements(left_class_counts, left_counts, total_class_counts=None, total_count=None, k=1):
+    if total_class_counts is None:
+        candidate_left_class_counts, total_class_counts = left_class_counts[:-1],\
+            left_class_counts[-1]
+    else:
+        candidate_left_class_counts = left_class_counts
+    if total_count is None:
+        candidate_left_counts, total_count = left_counts[:-1], left_counts[-1]
+    else:
+        candidate_left_counts = left_counts
+    candidate_right_class_counts = total_class_counts - candidate_left_class_counts
+    candidate_right_counts = total_count - candidate_left_counts
+    candidate_left_top_class_count = np.max(
+        candidate_left_class_counts, axis=2)
+    candidate_right_top_class_count = np.max(
+        candidate_right_class_counts, axis=2)
+    return (
+        candidate_left_top_class_count
+        + candidate_right_top_class_count
+    )
+
+
+def surrogate_to_p_at_k(value, y):
+    return (value - np.max(y.sum(axis=0))) / y.shape[0]
 
 
 def surrogate_to_gini(value, y):
@@ -113,6 +135,19 @@ def random_classify(X, y):
         left_sums, left_counts, total_sums, total_count).ravel()
     best_index = np.argmax(improvements)
     return best_index, thresholds[best_index], surrogate_to_gini(improvements[best_index], y), np.zeros(X.shape[1], dtype=np.bool)
+
+
+def random_classify_p_at_k(X, y, k=1):
+    thresholds = np.random.uniform(np.min(X, axis=0), np.max(X, axis=0))
+    masks = X <= thresholds
+    left_sums = masks.T.dot(y)[np.newaxis, :]
+    left_counts = masks.sum(axis=0)
+    total_sums = y.sum(axis=0)
+    total_count = y.shape[0]
+    improvements = surrogate_p_at_k_improvements(
+        left_sums, left_counts, total_sums, total_count, k=k).ravel()
+    best_index = np.argmax(improvements)
+    return best_index, thresholds[best_index], surrogate_to_p_at_k(improvements[best_index], y), np.zeros(X.shape[1], dtype=np.bool)
 
 
 def random_split(X, y, cal_improvements=cal_variance_improvements):
@@ -179,3 +214,16 @@ def greedy_classification(X, y):
     best_threshold = X[best_data_row, best_column]
     best_improvement = improvements[best_row, best_column]
     return best_column, best_threshold, surrogate_to_gini(best_improvement, y), np.zeros(X.shape[1], dtype=np.bool)
+
+
+def greedy_classification_p_at_k(X, y, k=1):
+    orders = np.argsort(X, axis=0)
+    left_sums = np.cumsum(y[orders], axis=0)
+    left_counts = np.arange(1, y.shape[0]+1)[:, np.newaxis]
+    improvements = surrogate_p_at_k_improvements(left_sums, left_counts, k=k)
+    best_row, best_column = np.unravel_index(
+        np.argmax(improvements), improvements.shape)
+    best_data_row = orders[best_row, best_column]
+    best_threshold = X[best_data_row, best_column]
+    best_improvement = improvements[best_row, best_column]
+    return best_column, best_threshold, surrogate_to_p_at_k(best_improvement, y), np.zeros(X.shape[1], dtype=np.bool)
