@@ -4,6 +4,8 @@ import numpy as np
 from decision_tree.base import Mask, Task, BestSplit, is_leaf, DecisionTree
 from decision_tree.utils import timeit
 from decision_tree.strategy import random_split, greedy_split, random_split_v2, random_classify
+from decision_tree.strategy import greedy_classification_v3
+from decision_tree.base import *
 
 
 def init_mask(n_row, n_col):
@@ -50,7 +52,6 @@ def find_best_split(X, y, candidate_attributes, max_feature=100, split_method=ra
     return BestSplit(attributes[best_index], best_threshold, new_constant_attrs, best_improvement)
 
 
-@timeit
 def build_tree(X, y,
                max_depth=2,
                max_feature=100,
@@ -89,6 +90,44 @@ def build_tree(X, y,
                     Task(right_mask, parent=node_id, is_left=False, depth=task.depth + 1))
                 tasks.append(
                     Task(left_mask, parent=node_id, is_left=True, depth=task.depth + 1))
+
+    return tree.final()
+
+
+def build_tree_v2(X, y,
+                  max_depth=2,
+                  max_feature=100,
+                  min_improvement=0.01,
+                  min_sample_leaf=1,
+                  leaf_from_data=leaf_from_data_regression):
+    max_node = 2 ** (max_depth + 1)
+    tree = DecisionTree(max_node)
+
+    orders = np.argsort(X, axis=0)
+    cumsums = np.cumsum(y[orders], axis=0)
+
+    tasks = [Task((orders, cumsums), parent=None, is_left=True, depth=0)]
+
+    while tasks:
+        task = tasks.pop()
+        node_id = tree.new_node_from_task(task)
+
+        if is_leaf_v2(task.mask, min_sample_leaf) or task.depth >= max_depth:
+            tree.add_leaf(node_id, leaf_from_data(y[task.mask[0]]))
+        else:
+            print(task.mask[0].shape)
+            best_order_row, best_column, best_data_row, best_improvement = greedy_classification_v3(*task.mask, y)
+            if best_improvement < min_improvement:
+                tree.add_leaf(node_id, leaf_from_data(y[task.mask[0]]))
+            else:
+                tree.add_binary_v2(node_id, best_column,
+                                   X[best_data_row, best_column])
+
+                left_orders, left_cumsums, right_orders, right_cumsums = split_orders_and_cumsums_v2(*task.mask, best_column, best_order_row,  y)
+                tasks.append(
+                    Task((right_orders, right_cumsums), parent=node_id, is_left=False, depth=task.depth + 1))
+                tasks.append(
+                    Task((left_orders, left_cumsums), parent=node_id, is_left=True, depth=task.depth + 1))
 
     return tree.final()
 

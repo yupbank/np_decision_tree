@@ -13,6 +13,36 @@ def surrogate_variance_improvements(left_sums, left_counts, total_sums=None, tot
 
     candidate_right_sums = total_sums - candidate_left_sums
     candidate_right_counts = total_count - candidate_left_counts
+
+    # variance_reduce =  (
+    #     np.square(candidate_left_sums)/candidate_left_counts
+    #     + np.square(candidate_right_sums)/candidate_right_counts
+    #     - np.square(total_sums)/total_count
+    # ) / total_count
+    return (
+        np.square(candidate_left_sums)/candidate_left_counts
+        + np.square(candidate_right_sums)/candidate_right_counts
+    )
+
+
+def surrogate_variance_improvements_v2(left_sums, left_counts, total_sums=None, total_count=None):
+    if total_sums is None:
+        candidate_left_sums, total_sums = left_sums[:-1], left_sums[-1]
+    else:
+        candidate_left_sums = left_sums
+    if total_count is None:
+        candidate_left_counts, total_count = left_counts[:-1], left_counts[-1]
+    else:
+        candidate_left_counts = left_counts
+
+    candidate_right_sums = total_sums - candidate_left_sums
+    candidate_right_counts = total_count - candidate_left_counts
+
+    return (
+        np.square(candidate_left_sums)/candidate_left_counts
+        + np.square(candidate_right_sums)/candidate_right_counts
+        - np.square(total_sums)/total_count
+    ) / total_count
     # variance_reduce =  (
     #     np.square(candidate_left_sums)/candidate_left_counts
     #     + np.square(candidate_right_sums)/candidate_right_counts
@@ -52,6 +82,28 @@ def surrogate_gini_improvements(left_class_counts, left_counts, total_class_coun
         candidate_left_sum_of_squared/candidate_left_counts
         + candidate_right_sum_of_squared/candidate_right_counts
     )
+
+
+def surrogate_gini_improvements_v2(left_class_counts, left_counts, total_class_counts=None, total_count=None):
+    if total_class_counts is None:
+        candidate_left_class_counts, total_class_counts = left_class_counts[:-1],\
+            left_class_counts[-1]
+    else:
+        candidate_left_class_counts = left_class_counts
+    if total_count is None:
+        candidate_left_counts, total_count = left_counts[:-1], left_counts[-1]
+    else:
+        candidate_left_counts = left_counts
+    candidate_right_class_counts = total_class_counts - candidate_left_class_counts
+    candidate_right_counts = total_count - candidate_left_counts
+    candidate_left_sum_of_squared = np.square(
+        candidate_left_class_counts).sum(axis=2)
+    candidate_right_sum_of_squared = np.square(
+        candidate_right_class_counts).sum(axis=2)
+    return (candidate_left_sum_of_squared/candidate_left_counts
+            + candidate_right_sum_of_squared/candidate_right_counts
+            - np.square(total_class_counts).sum()/total_count
+            )/total_count
 
 
 def surrogate_p_at_k_improvements(left_class_counts, left_counts, total_class_counts=None, total_count=None, k=1):
@@ -192,6 +244,7 @@ def greedy_split_v2(X, y):
     total_count = X.shape[0]
     left_sums = np.cumsum(y[orders], axis=0)[:-1]
     left_counts = np.arange(1, total_count)[:, np.newaxis]
+    return left_sums, left_counts
 
     improvements = surrogate_variance_improvements(
         left_sums, left_counts, total_sums, total_count)
@@ -201,6 +254,55 @@ def greedy_split_v2(X, y):
     best_threshold = X[best_data_row, best_column]
     best_improvement = improvements[best_row, best_column]
     return best_column, best_threshold, surrogate_to_variance(best_improvement, total_count, np.mean(y)), np.zeros(X.shape[1], dtype=np.bool)
+
+
+def select_by_mask(array, bool_mask, shape):
+    return array.T[bool_mask.T].reshape(shape[1], shape[0]).T
+
+
+def split_orders_and_cumsums_v2(orders, cumsums, col, row, y):
+    y_value_aux = np.zeros_like(y)
+    y_bool_aux = np.zeros_like(y, dtype=np.bool)
+
+    left_index = orders[:row, col]
+
+    left_shape = (row, orders.shape[1])
+    right_shape = (orders.shape[0]-row, orders.shape[1])
+
+    y_bool_aux[left_index] = 1
+    y_value_aux[left_index] = y[left_index]
+
+    left_mask = y_bool_aux[orders]
+    right_mask = ~left_mask
+    gross_left_cumsums = np.cumsum(y_value_aux[orders], axis=0)
+    gross_right_cumsums = cumsums - gross_left_cumsums
+
+    left_orders = select_by_mask(
+        orders, left_mask, left_shape)
+    left_cumsums = select_by_mask(
+        gross_left_cumsums, left_mask, left_shape)
+
+    right_orders = select_by_mask(
+        orders, right_mask, right_shape)
+    right_cumsums = select_by_mask(
+        gross_right_cumsums, right_mask, right_shape)
+    return left_orders, left_cumsums, right_orders, right_cumsums
+
+
+def greedy_split_v3(orders, cumsums, y):
+    counts = 1+np.arange(orders.shape[0])[:, np.newaxis]
+
+    improvements = surrogate_variance_improvements_v2(
+        cumsums, counts)
+
+    best_order_row, best_column = np.unravel_index(
+        np.argmax(improvements), improvements.shape)
+
+    best_data_row = orders[best_order_row, best_column]
+
+    best_improvement = improvements[best_order_row, best_column]
+
+    return best_order_row, best_column, best_data_row, best_improvement
 
 
 def greedy_classification(X, y):
@@ -213,6 +315,37 @@ def greedy_classification(X, y):
     best_data_row = orders[best_row, best_column]
     best_threshold = X[best_data_row, best_column]
     best_improvement = improvements[best_row, best_column]
+    return best_column, best_threshold, surrogate_to_gini(best_improvement, y), np.zeros(X.shape[1], dtype=np.bool)
+
+
+def greedy_classification_v3(orders, cumsums, y):
+    counts = 1+np.arange(orders.shape[0])[:, np.newaxis]
+    improvements = surrogate_gini_improvements_v2(
+        cumsums, counts)
+    best_order_row, best_column = np.unravel_index(
+        np.argmax(improvements), improvements.shape)
+
+    best_data_row = orders[best_order_row, best_column]
+
+    best_improvement = improvements[best_order_row, best_column]
+
+    return best_order_row, best_column, best_data_row, best_improvement
+
+
+def greedy_classification_both(X, y, k=1):
+    orders = np.argsort(X, axis=0)
+    left_sums = np.cumsum(y[orders], axis=0)
+    left_counts = np.arange(1, y.shape[0]+1)[:, np.newaxis]
+    improvements_a = surrogate_gini_improvements(left_sums, left_counts)
+    improvements_b = surrogate_p_at_k_improvements(left_sums, left_counts, k=k)
+    if np.argmax(improvements_a) != np.argmax(improvements_b):
+        print(np.argmax(improvements_a), np.max(improvements_a), np.mean(improvements_a),
+              np.argmax(improvements_b), np.max(improvements_b), np.mean(improvements_b))
+    best_row, best_column = np.unravel_index(
+        np.argmax(improvements_a), improvements_a.shape)
+    best_data_row = orders[best_row, best_column]
+    best_threshold = X[best_data_row, best_column]
+    best_improvement = improvements_a[best_row, best_column]
     return best_column, best_threshold, surrogate_to_gini(best_improvement, y), np.zeros(X.shape[1], dtype=np.bool)
 
 

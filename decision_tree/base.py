@@ -21,6 +21,16 @@ def is_leaf(mask, y, min_sample_per_leaf=10):
         return False
 
 
+def is_leaf_v2(mask, min_sample_per_leaf=10):
+    row, column = mask[0].shape
+    if row <= min_sample_per_leaf*2:
+        return True
+    elif column <= 1:
+        return True
+    else:
+        return False
+
+
 class DecisionTree:
     def __init__(self, max_node):
         children_left, children_right = np.empty(
@@ -52,6 +62,10 @@ class DecisionTree:
     def add_binary(self, node_id, best_split):
         self.tree_.threshold[node_id] = best_split.threshold
         self.tree_.feature[node_id] = best_split.attribute
+
+    def add_binary_v2(self, node_id, col, threshold):
+        self.tree_.threshold[node_id] = threshold
+        self.tree_.feature[node_id] = col
 
     def final(self):
         return self
