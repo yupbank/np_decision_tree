@@ -21,11 +21,9 @@ def is_leaf(mask, y, min_sample_per_leaf=10):
         return False
 
 
-def is_leaf_v2(mask, min_sample_per_leaf=10):
-    row, column = mask[0].shape
+def is_leaf_v2(orders, min_sample_per_leaf=10):
+    row, column = orders.shape
     if row <= min_sample_per_leaf*2:
-        return True
-    elif column <= 1:
         return True
     else:
         return False
@@ -39,11 +37,11 @@ class DecisionTree:
         value = np.empty(max_node)
         threshold = np.empty(max_node)
 
-        value[:] = -1
-        children_left[:] = -1
-        children_right[:] = -1
-        feature[:] = -1
-        threshold[:] = -1
+        value[:] = -2
+        children_left[:] = -2
+        children_right[:] = -2
+        feature[:] = -2
+        threshold[:] = -2
 
         self.tree_ = Tree(children_left, children_right,
                           feature, threshold, value)

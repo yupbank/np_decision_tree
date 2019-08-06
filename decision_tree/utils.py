@@ -20,7 +20,7 @@ def inference(data, clf):
         condition = data[auxilary, feature[prev_node]] <= threshold[prev_node]
         potential_next_node = np.where(
             condition, left[prev_node], right[prev_node])
-        potential_condition = potential_next_node != -1
+        potential_condition = potential_next_node != -2
         if not np.any(potential_condition):
             break
         next_node = np.where(potential_condition,
@@ -37,7 +37,7 @@ def inference_leaf(data, clf):
         condition = data[auxilary, feature[prev_node]] <= threshold[prev_node]
         potential_next_node = np.where(
             condition, left[prev_node], right[prev_node])
-        potential_condition = potential_next_node != -1
+        potential_condition = potential_next_node != -2
         if not np.any(potential_condition):
             break
         next_node = np.where(potential_condition,
