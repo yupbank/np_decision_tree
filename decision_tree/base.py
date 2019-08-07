@@ -32,14 +32,14 @@ def is_leaf_v2(orders, min_sample_per_leaf=10):
 class DecisionTree:
     def __init__(self, max_node):
         children_left, children_right = np.empty(
-            max_node, dtype=np.int32), np.empty(max_node, dtype=np.int32)
-        feature = np.empty(max_node, dtype=np.int32)
-        value = np.empty(max_node)
-        threshold = np.empty(max_node)
+            max_node-1, dtype=np.int64), np.empty(max_node-1, dtype=np.int64)
+        feature = np.empty(max_node-1, dtype=np.int64)
+        value = np.empty(max_node-1)
+        threshold = np.empty(max_node-1)
 
-        value[:] = -2
-        children_left[:] = -2
-        children_right[:] = -2
+        #value[:] = -2
+        children_left[:] = -1
+        children_right[:] = -1
         feature[:] = -2
         threshold[:] = -2
 

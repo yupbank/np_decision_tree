@@ -1,7 +1,9 @@
 import numpy as np
 from collections import namedtuple
 from decision_tree.base import DecisionTree, is_leaf_v2
+
 Task = namedtuple('Task', 'orders parent is_left depth')
+
 # variance_reduce =  (
 #     np.square(candidate_left_sums)/candidate_left_counts
 #     + np.square(candidate_right_sums)/candidate_right_counts
@@ -9,11 +11,41 @@ Task = namedtuple('Task', 'orders parent is_left depth')
 # ) / total_count
 
 
+def best_v1(cumsums, n=None, inverse_reciprical=None, bidirection_reciprical=None):
+    n = n or cumsums.shape[0]
+    inverse_reciprical = inverse_reciprical or np.reciprocal(
+        np.arange(n-1, 0, -1,  dtype=np.float32))[:, np.newaxis]
+    bidirection_reciprical = bidirection_reciprical or inverse_reciprical + \
+        np.reciprocal(np.arange(1, n,  dtype=np.float32))[:, np.newaxis]
+    square_cumsum = np.square(cumsums)
+    surrogate = bidirection_reciprical*square_cumsum[:-1] + inverse_reciprical * \
+        (square_cumsum[-1, -1] - 2*cumsums[-1, -1]*cumsums[:-1])
+    return surrogate
+
+
+def best_v2(cumsums):
+    assert len(cumsums.shape) >= 2
+
+    counts = 1+np.arange(cumsums.shape[0])[:, np.newaxis]
+    candidate_left_sums, total_sums = cumsums[:-1], cumsums[-1][0]
+    #candidate_left_sums, total_sums = cumsums[:-1], cumsums[-1]
+    candidate_left_counts, total_count = counts[:-1], counts[-1]
+
+    candidate_right_sums = total_sums - candidate_left_sums
+    candidate_right_counts = total_count - candidate_left_counts
+    surrogate = (
+        np.square(candidate_left_sums)/candidate_left_counts
+        + np.square(candidate_right_sums)/candidate_right_counts
+    )
+    return surrogate
+
+
 def best_variance_improvements(cumsums):
     assert len(cumsums.shape) >= 2
 
     counts = 1+np.arange(cumsums.shape[0])[:, np.newaxis]
-    candidate_left_sums, total_sums = cumsums[:-1], cumsums[-1]
+    candidate_left_sums, total_sums = cumsums[:-1], cumsums[-1][0]
+    #candidate_left_sums, total_sums = cumsums[:-1], cumsums[-1]
     candidate_left_counts, total_count = counts[:-1], counts[-1]
 
     candidate_right_sums = total_sums - candidate_left_sums
@@ -30,7 +62,8 @@ def best_variance_improvements(cumsums):
 
     variance_reduce = (
         best_surrogate/total_count -
-        np.square(total_sums[best_column]/total_count)
+        #np.square(total_sums[best_column]/total_count)
+        np.square(total_sums/total_count)
     )
     return best_row, best_column, variance_reduce
 
@@ -45,28 +78,26 @@ def greedy_regression_split(orders, x, y):
     return threshold, best_column, best_improvement, left_rows
 
 
-def cal_mask(orders, index, n_samples):
+def split_orders(orders, index, n_samples):
     bool_aux = np.zeros(n_samples, dtype=np.bool)
     bool_aux[index] = 1
-    return bool_aux[orders]
-
-
-def mask_with_fix_column_size_2d(array, bool_mask, shape):
-    return array.T[bool_mask.T].reshape(shape[1], shape[0]).T
-
-
-def split_orders(orders, index, n_samples, mask_select=mask_with_fix_column_size_2d):
-    left_mask = cal_mask(orders, index, n_samples)
-    right_mask = ~left_mask
-
-    total_row, total_column = orders.shape
-    left_shape = (index.shape[0], total_column)
-    right_shape = (total_row-index.shape[0], total_column)
-
-    left_orders = mask_select(orders, left_mask, left_shape)
-    right_orders = mask_select(orders, right_mask, right_shape)
+    left_masks = bool_aux[orders]
+    left_orders = orders.T[left_masks.T].reshape(-1, index.shape[0]).T
+    right_orders = orders.T[~left_masks.T].reshape(
+        -1, orders.shape[0]-index.shape[0]).T
 
     return left_orders, right_orders
+
+
+def split_orders_v2(orders, index, n_samples):
+    bool_aux = np.zeros(n_samples, dtype=np.bool)
+    bool_aux[index] = 1
+    left_masks = bool_aux[orders]
+    ranks = np.argsort(left_masks.T.ravel())
+    new_res = orders.T.ravel()[ranks]
+    left = new_res[:index.shape[0]*n_samples].reshape(-1, n_samples).T
+    right = new_res[index.shape[0]*n_samples:].reshape(-1, n_samples).T
+    return left, right
 
 
 leaf_from_data = np.mean
