@@ -40,6 +40,28 @@ def best_v2(cumsums):
     return surrogate
 
 
+def best_v3(cumsums):
+    n = cumsums.shape[0]
+    total_sum = cumsums[-1][-1]
+    ratio_a = n*np.reciprocal(np.arange(1, n, dtype=np.float32)
+                              * np.arange(n-1, 0, -1, dtype=np.float32))[:, np.newaxis]
+    k = np.square(
+        cumsums[:-1] - (np.arange(1, n, dtype=np.float32)*total_sum/n)[:, np.newaxis])
+    return ratio_a*k + total_sum**2/n
+
+
+def best_variance_improvements_v2(cumsums):
+    n = cumsums.shape[0]
+    total_sum = cumsums[-1][-1]
+    ratio = np.reciprocal(
+        np.arange(1, n, dtype=np.float32)*np.arange(n-1, 0, -1, dtype=np.float32))[:, np.newaxis]
+    improvements = ratio*np.square(
+        cumsums[:-1] - (total_sum/n*np.arange(1, n, dtype=np.float32))[:, np.newaxis])
+    best_row, best_column = np.unravel_index(
+        np.argmax(improvements), improvements.shape)
+    return best_row, best_column, improvements[best_row, best_column]
+
+
 def best_variance_improvements(cumsums):
     assert len(cumsums.shape) >= 2
 
@@ -70,7 +92,7 @@ def best_variance_improvements(cumsums):
 
 def greedy_regression_split(orders, x, y):
     cumsums = np.cumsum(y[orders], axis=0)
-    best_row, best_column, best_improvement = best_variance_improvements(
+    best_row, best_column, best_improvement = best_variance_improvements_v2(
         cumsums)
     best_data_row = orders[best_row, best_column]
     threshold = x[best_data_row, best_column]
