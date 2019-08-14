@@ -1,5 +1,6 @@
 import numpy as np
 from decision_tree.stream_median import StreamMedian
+from decision_tree.one import DecisionTree, Task, split_orders
 
 
 def l1_difference(y):
@@ -66,9 +67,9 @@ def best_l1_improvements(ys):
         axis=0
     )[::-1]
 
-    improvements = right_improvements + left_improvements
+    improvements = right_improvements[1:] + left_improvements[:-1]
     best_row, best_column = np.unravel_index(
-        np.argmax(improvements), improvements.shape)
+        np.argmin(improvements), improvements.shape)
     return best_row, best_column, improvements[best_row, best_column]
 
 
@@ -81,7 +82,7 @@ def greedy_regression_split(orders, X, y):
     return threshold, best_column, best_improvement, left_rows
 
 
-def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1):
+def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1, leaf_from_data=np.median):
     max_node = 2 ** (max_depth + 1)
     tree = DecisionTree(max_node)
 
