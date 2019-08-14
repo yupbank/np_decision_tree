@@ -64,6 +64,21 @@ def best_variance_improvements(cumsums):
     return best_row, best_column, improvements[best_row, best_column]
 
 
+def best_variance_improvements_v2(cumsums):
+    n = cumsums.shape[0]
+    total_sum = cumsums[-1][-1]
+    parent_mean = total_sum/n
+    ratio_a = np.sqrt(np.reciprocal(
+        np.arange(1, n, dtype=np.float32)*np.arange(n-1, 0, -1, dtype=np.float32)))[:, np.newaxis]
+    ratio_b = np.sqrt(np.arange(1, n, dtype=np.float32) /
+                      np.arange(n-1, 0, -1, dtype=np.float32))[:, np.newaxis]
+    improvements = np.square(ratio_a *
+                             cumsums[:-1] - parent_mean * ratio_b)
+    best_row, best_column = np.unravel_index(
+        np.argmax(improvements), improvements.shape)
+    return best_row, best_column, improvements[best_row, best_column]
+
+
 def greedy_regression_split(orders, x, y):
     cumsums = np.cumsum(y[orders], axis=0)
     best_row, best_column, best_improvement = best_variance_improvements(
