@@ -25,24 +25,42 @@ In [3]: from sklearn.datasets import make_regression
 
 In [4]: from sklearn.tree import DecisionTreeRegressor
 
-In [5]: x, y = make_regression(n_samples=10000)
+In [5]: from decision_tree.utils import inference
 
-In [6]: clf = DecisionTreeRegressor(max_depth=10).fit(x, y)
+In [6]: x, y = make_regression(n_samples=10000)
 
-In [7]: t = build_regression_tree(x, y, max_depth=10)
+In [7]: clf = DecisionTreeRegressor(max_depth=1)
 
-In [8]: from decision_tree.utils import inference
+In [8]: t = build_regression_tree(x, y, max_depth=1)
 
-In [9]: regression.mean_squared_error(inference(x, t), y)
-Out[9]: 3385.9081612808072
+In [9]: clf.fit(x, y)
+Out[9]:
+DecisionTreeRegressor(criterion='mse', max_depth=1, max_features=None,
+                      max_leaf_nodes=None, min_impurity_decrease=0.0,
+                      min_impurity_split=None, min_samples_leaf=1,
+                      min_samples_split=2, min_weight_fraction_leaf=0.0,
+                      presort=False, random_state=None, splitter='best')
 
-In [10]: regression.mean_squared_error(inference(x, clf), y)
-Out[10]: 3377.270646863389
+In [10]: regression.mean_squared_error(inference(x, t), y)
+Out[10]: 16909.89923684728
 
-In [11]: %timeit DecisionTreeRegressor(max_depth=10).fit(x, y)
+In [11]: regression.mean_squared_error(inference(x, clf), y)
+Out[11]: 16909.89923684728
+
+In [12]: clf = DecisionTreeRegressor(max_depth=10).fit(x, y)
+
+In [13]: t = build_regression_tree(x, y, max_depth=10)
+
+In [14]: regression.mean_squared_error(inference(x, t), y)
+Out[14]: 3385.9081612808072
+
+In [15]: regression.mean_squared_error(inference(x, clf), y)
+Out[15]: 3377.270646863389
+
+In [16]: %timeit DecisionTreeRegressor(max_depth=10).fit(x, y)
 654 ms ± 63.6 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
-In [12]: %timeit build_regression_tree(x, y, max_depth=10)
+In [17]: %timeit build_regression_tree(x, y, max_depth=10)
 390 ms ± 6.78 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 ---
