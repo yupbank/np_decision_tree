@@ -63,6 +63,30 @@ class StreamMedian(object):
             median = top_small(self.small)
         return median, median
 
+    def cummedian(self, num):
+        if len(self.small) == 0:
+            push_small(self.small, num)
+        else:
+            if num <= top_small(self.small):
+                push_small(self.small, num)
+            else:
+                push_large(self.large, num)
+
+            if len(self.small) > len(self.large)+1:
+                push_large(self.large, pop_small(self.small))
+
+            if len(self.large) > len(self.small)+1:
+                push_small(self.small, pop_large(self.large))
+
+        if len(self.large) == len(self.small):
+            return top_small(self.small), top_large(self.large)
+
+        if len(self.large) > len(self.small):
+            median = top_large(self.large)
+        else:
+            median = top_small(self.small)
+        return median, median
+
     def __call__(self, num):
         self.add(num)
         return self.double_median()
