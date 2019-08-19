@@ -1,5 +1,5 @@
 from functools import partial
-
+from collections import deque
 import numpy as np
 from decision_tree.base import Mask, Task, BestSplit, is_leaf, DecisionTree
 from decision_tree.utils import timeit
@@ -110,7 +110,9 @@ def build_tree_v2(X, y,
     orders = np.argsort(X, axis=0)
     cumsums = np.cumsum(y[orders], axis=0)
 
-    tasks = [Task((orders, cumsums), parent=None, is_left=True, depth=0)]
+    tasks = deque()
+    tasks = deque.append(
+        Task((orders, cumsums), parent=None, is_left=True, depth=0))
 
     while tasks:
         task = tasks.pop()
