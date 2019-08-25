@@ -49,7 +49,21 @@ class DecisionTree:
         return self
 
 
-def best_variance_improvements(cumsums):
+def np_gene(n): return np.reciprocal(
+    np.arange(1, n, dtype=np.float32)*np.arange(n-1, 0, -1))
+
+
+def best_variance_improvements(ys):
+    residual = np.arange(1, ys.shape[0]+1)*(ys[-1][-1]/ys.shape[0])
+    tmp = np.abs(ys-residual[:, np.newaxis])
+    tmp_order = np.argmax(tmp, axis=1)
+    value = tmp[np.arange(ys.shape[0]), tmp_order]
+    res = np_gene(ys.shape[0])*np.square(value)[:-1]
+    max_col = np.argmax(res)
+    return max_col, tmp_order[max_col], res[max_col]
+
+
+def best_variance_improvements_v0(cumsums):
     n = cumsums.shape[0]
     total_sum = cumsums[-1][-1]
     parent_mean = total_sum/n
@@ -72,16 +86,20 @@ def best_variance_improvements_v2(cumsums):
         np.arange(1, n, dtype=np.float32)*np.arange(n-1, 0, -1, dtype=np.float32)))[:, np.newaxis]
     ratio_b = np.sqrt(np.arange(1, n, dtype=np.float32) /
                       np.arange(n-1, 0, -1, dtype=np.float32))[:, np.newaxis]
-    improvements = np.square(ratio_a *
-                             cumsums[:-1] - parent_mean * ratio_b)
+    improvements = np.abs(ratio_a *
+                          cumsums[:-1] - parent_mean * ratio_b)
     best_row, best_column = np.unravel_index(
         np.argmax(improvements), improvements.shape)
-    return best_row, best_column, improvements[best_row, best_column]
+    return best_row, best_column, np.square(improvements[best_row, best_column])
 
 
-def greedy_regression_split(orders, x, y):
+def greedy_regression_split(orders, x, y, v):
     cumsums = np.cumsum(y[orders], axis=0)
-    best_row, best_column, best_improvement = best_variance_improvements(
+    if v == 1:
+        func = best_variance_improvements
+    else:
+        func = best_variance_improvements_v2
+    best_row, best_column, best_improvement = func(
         cumsums)
     best_data_row = orders[best_row, best_column]
     threshold = x[best_data_row, best_column]
@@ -114,7 +132,7 @@ def split_orders_v2(orders, index, n_samples):
 leaf_from_data = np.mean
 
 
-def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1):
+def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1, v=1):
     max_node = 2 ** (max_depth + 1)
     tree = DecisionTree(max_node)
 
@@ -128,7 +146,7 @@ def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e
             tree.add_leaf(node_id, leaf_from_data(y[task.orders]))
         else:
             threshold, best_column, best_improvement, left_rows = greedy_regression_split(
-                task.orders, X, y)
+                task.orders, X, y, v)
             if best_improvement < min_improvement:
                 tree.add_leaf(node_id, leaf_from_data(y[task.orders]))
             else:
@@ -144,7 +162,7 @@ def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e
     return tree.final()
 
 
-def build_regression_tree_v1_5(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1):
+def build_regression_tree_v1_5(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1, v=1):
     max_node = 2 ** (max_depth + 1)
     tree = DecisionTree(max_node)
 
@@ -158,7 +176,7 @@ def build_regression_tree_v1_5(X, y, max_depth=2, max_feature=100, min_improveme
             tree.add_leaf(node_id, leaf_from_data(y[task.orders]))
         else:
             threshold, best_column, best_improvement, left_rows = greedy_regression_split(
-                task.orders, X, y)
+                task.orders, X, y, v)
             if best_improvement < min_improvement:
                 tree.add_leaf(node_id, leaf_from_data(y[task.orders]))
             else:
