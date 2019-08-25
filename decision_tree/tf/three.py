@@ -27,30 +27,35 @@ Left_sum_N
 """
 
 
-def batch_variance_improvements(cumsums, sizes, orders, left_mask, right_mask):
-    #print(len(sizes))
+def batch_variance_improvements(parents, cumsums, sizes, orders, left_mask, right_mask):
     num_instances, num_features = cumsums.shape
+    sizes = np.array(sizes)
     sums = cumsums[:, 0][np.array(sizes)-1]
-    left_means = np.concatenate(
-        [np.arange(1, n+1)*(sum_/n) for sum_, n in zip(sums, sizes)])
-    tmp = np.abs(cumsums - left_means[:, np.newaxis])
+    means = sums/sizes
+    left_bias = np.concatenate(
+        [np.arange(1, n+1)*mean for mean, n in zip(means, sizes)])
+    tmp = np.abs(cumsums - left_bias[:, np.newaxis])
     max_features = np.argmax(tmp, axis=1)
-    diff = np.square(tmp[np.arange(num_instances), max_features])
-    left_sizes, right_sizes, cuting_points = [], [], []
+    diff = np.square(tmp[np.arange(max_features.size), max_features])
+    left_sizes, right_sizes = [], []
     start = 0
     lleft_rows, lright_rows = [], []
-    for size in sizes:
+    for parent, size in zip(parents, sizes):
         end = start+size
         if size <= 2:
+            np.mean(y[orders[start:end, 0]])
+            print(start, end)
             start = end
             continue
         weight = np.reciprocal(
             np.arange(1, size, dtype=np.float32)*np.arange(size-1, 0, -1))
         impro_in_range = weight*diff[start:end-1]
         max_col = np.argmax(impro_in_range)
+        improvement = impro_in_range[max_col]
+        if improvement <= 1e-8:
+            print(start, end)
         cutting_rank = start+max_col
         best_feature = max_features[cutting_rank]
-        improvement = impro_in_range[max_col]
         left_size = max_col+1
         right_size = size-max_col-1
 
@@ -74,16 +79,20 @@ def mask_to_order(mask, order):
 
 
 def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e-7, min_sample_leaf=1):
-    min_size = min_sample_leaf*2
-
     orders = np.argsort(X, axis=0)
-    sizes = np.array([X.shape[0]])
+    parents, sizes = [0], np.array([X.shape[0]])
+    left_mask, right_mask = np.zeros_like(
+        y, dtype=np.bool), np.zeros_like(y, dtype=np.bool)
     for i in range(max_depth):
-        left_mask = np.zeros_like(y, dtype=np.bool)
-        right_mask = np.zeros_like(y, dtype=np.bool)
-        ys = np.cumsum(y[orders], axis=0)
+        cumsums = np.cumsum(y[orders], axis=0)
         cuting_points, sizes, left_mask, right_mask = batch_variance_improvements(
-            ys, sizes, orders, left_mask, right_mask)
+            parents,
+            cumsums,
+            sizes,
+            orders,
+            left_mask,
+            right_mask)
         left_orders = mask_to_order(left_mask, orders)
         right_orders = mask_to_order(right_mask, orders)
         orders = np.concatenate([left_orders, right_orders], axis=0)
+        left_mask[:], right_mask[:] = 0, 0
