@@ -40,7 +40,7 @@ class DecisionTree:
     @staticmethod
     def is_leaf(orders, min_sample_per_leaf=10):
         row, column = orders.shape
-        if row <= min_sample_per_leaf*2:
+        if row <= min_sample_per_leaf:
             return True
         else:
             return False

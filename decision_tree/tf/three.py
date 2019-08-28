@@ -72,7 +72,7 @@ def batch_variance_improvements(parents, cumsums, sizes, orders, left_mask, righ
     return cuting_points, left_sizes+right_sizes, left_mask, right_mask
 
 
-def mask_to_order(mask, order):
+def split_order_with_mask(mask, order):
     num_rank, num_feature = order.shape
     assert mask.shape[0] >= num_rank
     return order.T[(mask[order]).T].reshape(num_feature, -1).T
@@ -92,7 +92,7 @@ def build_regression_tree(X, y, max_depth=2, max_feature=100, min_improvement=1e
             orders,
             left_mask,
             right_mask)
-        left_orders = mask_to_order(left_mask, orders)
-        right_orders = mask_to_order(right_mask, orders)
+        left_orders = split_order_with_mask(left_mask, orders)
+        right_orders = split_order_with_mask(right_mask, orders)
         orders = np.concatenate([left_orders, right_orders], axis=0)
         left_mask[:], right_mask[:] = 0, 0
