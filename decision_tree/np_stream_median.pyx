@@ -7,9 +7,9 @@ from libcpp.queue cimport priority_queue
 
 def cummedian(np.ndarray arr):
     cdef int vmax = arr.shape[0]
-    cdef np.ndarray out = np.zeros((vmax, 2), dtype=float)
-    cdef priority_queue[float] small_queue = priority_queue[float]()
-    cdef priority_queue[float] large_queue = priority_queue[float]()
+    cdef np.ndarray out = np.zeros((vmax, 2), dtype=arr.dtype)
+    cdef priority_queue[double] small_queue = priority_queue[double]()
+    cdef priority_queue[double] large_queue = priority_queue[double]()
     cdef long N = arr.shape[0] 
     small_queue.push(arr[0])
     out[0, 0] = arr[0]

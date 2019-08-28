@@ -74,9 +74,19 @@ def best_l1_improvements(ys):
     return best_row, best_column, improvements[best_row, best_column]
 
 
+def audit_cummedian(y):
+    res_1 = cummedian(y)
+    res_2 = running_median_v2(y)
+    if np.array_equal(res_1, res_2):
+        return res_1
+    else:
+        import ipdb
+        ipdb.set_trace()
+        return res_1
+
+
 def best_l1_improvements_v2(ys):
     left_median = np.apply_along_axis(cummedian, 0, ys)
-    # left_median = np.apply_along_axis(running_median_v2, 0, ys)
     left_ys = ys[1:]
     small_left_median = left_median[:-1, 0]
     large_left_median = left_median[:-1, 1]
@@ -91,8 +101,6 @@ def best_l1_improvements_v2(ys):
     )
     left_improvements = np.concatenate(
         [np.zeros((1, ys.shape[1])), left_improvements])
-    # right_median = np.apply_along_axis(
-    #     running_median_v2, 0, ys[::-1])[::-1]
     right_median = np.apply_along_axis(
         cummedian, 0, ys[::-1])[::-1]
     right_ys = ys
@@ -115,6 +123,17 @@ def best_l1_improvements_v2(ys):
     return best_row, best_column, improvements[best_row, best_column]
 
 
+def audit_best(ys):
+    res_1 = best_l1_improvements(ys)
+    res_2 = best_l1_improvements_v2(ys)
+    if res_1 == res_2:
+        return res_1
+    else:
+        import ipdb
+        ipdb.set_trace()
+        return res_1
+
+
 def greedy_regression_split(orders, X, y):
     best_row, best_column, best_improvement = best_l1_improvements(
         y[orders])
@@ -122,6 +141,17 @@ def greedy_regression_split(orders, X, y):
     threshold = X[best_data_row, best_column]
     left_rows = orders[:best_row+1, best_column]
     return threshold, best_column, best_improvement, left_rows
+
+
+def audit_split(orders, X, y):
+    res_1 = greedy_regression_split(orders, X, y)
+    res_2 = greedy_regression_split_v2(orders, X, y)
+    if np.array_equal(res_1[:3], res_2[:3]):
+        return res_1
+    else:
+        import ipdb
+        ipdb.set_trace()
+        return res_1
 
 
 def greedy_regression_split_v2(orders, X, y):
