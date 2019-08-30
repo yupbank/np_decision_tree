@@ -4,7 +4,7 @@ Decision Tree Impelemented in Numpy
 
 # What's in
 
-- Regression Tree with exhaustive search and randomized search 
+- Regression Tree with exhaustive search in L1 and L2 loss.
 - Both Train and Inference
 - Pure numpy
 
