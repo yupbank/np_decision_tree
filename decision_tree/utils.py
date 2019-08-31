@@ -13,7 +13,9 @@ def timeit(func):
 
 
 def inference(data, clf):
-    feature, threshold, left, right, value = clf.tree_.feature, clf.tree_.threshold, clf.tree_.children_left, clf.tree_.children_right, clf.tree_.value
+    feature, threshold, left, right, value = (
+        clf.tree_.feature, clf.tree_.threshold, clf.tree_.children_left, clf.tree_.children_right, clf.tree_.value
+    )
     auxilary = np.arange(data.shape[0], dtype=np.int32)
     prev_node = np.zeros(1, dtype=np.int32)
     while 1:

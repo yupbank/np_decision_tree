@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import chain
 
 
 def np_gene(n): return np.reciprocal(
@@ -21,8 +22,11 @@ def best_variance_improvements(ys, start, end):
 def batch_diff_and_feature(ys, sizes):
     cumsums = np.cumsum(ys, axis=0)
     sizes = np.array(sizes)
-    sums = cumsums[:, 0][np.cumsums(sizes)-1]
-    np.repeat(list(chain([0], sums))[:-1], sizes)
+    index = np.cumsum(sizes)-1
+    sums = cumsums[:, 0][index]
+    cumsums = cumsums - \
+        np.repeat(list(chain([0], sums))[:-1], sizes)[:, np.newaxis]
+    sums = cumsums[:, 0][index]
     means = sums/sizes
     left_bias = np.concatenate(
         [np.arange(1, n+1)*mean for mean, n in zip(means, sizes)])
@@ -43,7 +47,6 @@ def best_row_and_feature(diff, max_features, start, end):
 
 
 def size_to_index(sizes):
-    from itertools import chain
     indexes = np.cumsum(sizes)
     return zip(chain([0], indexes), indexes)
 
@@ -109,8 +112,8 @@ def build_regression_tree(X, y, max_depth=2, min_improvement=1e-7, min_sample_le
         left_parents, right_parents = [], []
         left_mask[:], right_mask[:] = 0, 0
 
-        #if depth < max_depth:
-        #    diff, max_features = batch_diff_and_feature(ys, sizes)
+        if depth < max_depth:
+            diff, max_features = batch_diff_and_feature(ys, sizes)
 
         for n, (parent, (start, end)) in enumerate(zip(parents, size_to_index(sizes))):
             size = end-start
@@ -122,9 +125,8 @@ def build_regression_tree(X, y, max_depth=2, min_improvement=1e-7, min_sample_le
                 tree.add_leaf(node_id, np.mean(ys[start:end, 0]))
                 continue
             else:
-                max_row, best_feature, improvement = best_variance_improvements(
-                    ys, start, end)
-                #max_row, best_feature, improvement =  best_row_and_feature(diff, max_features, start, end)
+                max_row, best_feature, improvement = best_row_and_feature(
+                    diff, max_features, start, end)
                 if improvement <= min_improvement:
                     tree.add_leaf(node_id, np.mean(ys[start:end, 0]))
                     continue
