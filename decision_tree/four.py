@@ -1,36 +1,39 @@
 import numpy as np
-from itertools import chain
 
 
 def np_gene(n): return np.reciprocal(
     np.arange(1, n, dtype=np.float32)*np.arange(n-1, 0, -1))
 
 
-def np_gene_plus(n): return np.concatenate([np.reciprocal(
-    np.arange(1, n, dtype=np.float32)*np.arange(n-1, 0, -1)), np.zeros(1)])
-
-
-def best_variance_improvements(ys, start, end):
+def best_variance_improvements(ys, start, end, weights=None):
     size = end-start
-    cumsums = np.cumsum(ys[start:end], axis=0)
-    residual = np.arange(
-        1, size+1)*(cumsums[-1][-1]/cumsums.shape[0])
-    tmp = np.abs(cumsums-residual[:, np.newaxis])
-    tmp_order = np.argmax(tmp, axis=1)
-    diff = np.square(tmp[np.arange(size), tmp_order])
-    res = np_gene(size)*diff[:-1]
-    max_row = np.argmax(res)
-    return max_row, tmp_order[max_row], res[max_row]
+    if weights is None:
+        cumsums = np.cumsum(ys[start:end], axis=0)
+        residual = np.arange(
+            1, size+1)*(cumsums[-1][-1]/cumsums.shape[0])
+        tmp = np.abs(cumsums-residual[:, np.newaxis])
+        tmp_order = np.argmax(tmp, axis=1)
+        diff = np.square(tmp[np.arange(size), tmp_order])
+        res = np_gene(size)*diff[:-1]
+        max_row = np.argmax(res)
+        return max_row, tmp_order[max_row], res[max_row]
+    else:
+        cumsums = np.cumsum(ys[start:end], axis=0)
+        cumwei = np.cumsum(weights[start:end], axis=0)
+        residual = cumwei*cumsums[-1][-1]/cumwei[-1][-1]
+        tmp = np.square(cumsums-residual)
+        ratio = np.reciprocal(cumwei[:-1]*(cumwei[-1][-1]-cumwei[:-1]))
+        improvments = ratio*tmp[:-1]
+        max_row, max_col = np.unravel_index(
+            np.argmax(improvments), improvments.shape)
+        return max_row, max_col, improvments[max_row, max_col]
 
 
 def batch_diff_and_feature(ys, sizes):
     cumsums = np.cumsum(ys, axis=0)
     sizes = np.array(sizes)
-    index = np.cumsum(sizes)-1
-    sums = cumsums[:, 0][index]
-    cumsums = cumsums - \
-        np.repeat(list(chain([0], sums))[:-1], sizes)[:, np.newaxis]
-    sums = cumsums[:, 0][index]
+    sums = cumsums[:, 0][np.cumsums(sizes)-1]
+    np.repeat(list(chain([0], sums))[:-1], sizes)
     means = sums/sizes
     left_bias = np.concatenate(
         [np.arange(1, n+1)*mean for mean, n in zip(means, sizes)])
@@ -38,21 +41,6 @@ def batch_diff_and_feature(ys, sizes):
     max_features = np.argmax(abs_diff, axis=1)
     diff = np.square(np.max(abs_diff, axis=1))
     return diff, max_features
-
-
-def size_to_index(sizes):
-    indexes = np.cumsum(sizes)
-    return zip(chain([0], indexes), indexes)
-
-
-def batch_best_row_and_feature(diff, max_features, sizes):
-    weight = np.concatenate([np_gene_plus(size) for size in sizes])
-    improvements = weight*diff
-    for start, end in size_to_index(sizes):
-        max_row = np.argmax(improvements[start:end])
-        best_feature = max_features[start+max_row]
-        improvement = improvements[start+max_row]
-        yield start, end, max_row, best_feature, improvement
 
 
 def best_row_and_feature(diff, max_features, start, end):
@@ -63,6 +51,12 @@ def best_row_and_feature(diff, max_features, start, end):
     improvement = impro_in_range[max_row]
     best_feature = max_features[start + max_row]
     return max_row, best_feature, improvement
+
+
+def size_to_index(sizes):
+    from itertools import chain
+    indexes = np.cumsum(sizes)
+    return zip(chain([0], indexes), indexes)
 
 
 def split_order_with_mask(mask, order):
@@ -111,44 +105,62 @@ class DecisionTree:
         self.tree_.feature[node_id] = col
 
 
-def build_regression_tree(X, y, max_depth=2, min_improvement=1e-7, min_sample_leaf=1):
+def build_regression_tree(X, y, max_depth=2, min_improvement=1e-7, min_sample_leaf=1, weight=None):
     tree = DecisionTree(2**(max_depth+1))
     n_samples = X.shape[0]
     orders = np.argsort(X, axis=0)
 
     left_mask, right_mask = np.zeros_like(
         y, dtype=np.bool), np.zeros_like(y, dtype=np.bool)
-
+    if weight is not None:
+        y = y*weight
     parents, sizes, left_elements = [None], [X.shape[0]], 0
     for depth in range(max_depth+1):
         ys = y[orders]
+        weights = weight[orders] if weight is not None else None
         left_sizes, right_sizes = [], []
         left_parents, right_parents = [], []
         left_mask[:], right_mask[:] = 0, 0
 
-        if depth < max_depth:
-            diff, max_features = batch_diff_and_feature(ys, sizes)
+        #if depth < max_depth:
+        #    diff, max_features = batch_diff_and_feature(ys, sizes)
 
-        for n, (parent, (start, end, max_row, best_feature, improvement)) in enumerate(zip(parents, batch_best_row_and_feature(diff, max_features, sizes))):
+        for n, (parent, (start, end)) in enumerate(zip(parents, size_to_index(sizes))):
             size = end-start
 
             node_id = tree.add_node(parent, n < left_elements)
             tree.add_size(node_id, size)
 
-            if size <= min_sample_leaf or depth >= max_depth or improvement <= min_improvement:
-                tree.add_leaf(node_id, np.mean(ys[start:end, 0]))
+            if size <= min_sample_leaf or depth >= max_depth:
+                if weight is None:
+                    tree.add_leaf(node_id, np.mean(ys[start:end, 0]))
+                else:
+                    tree.add_leaf(node_id, np.sum(
+                        ys[start:end, 0])/np.sum(weights[start:end, 0]))
                 continue
             else:
-                tree.add_binary(
-                    node_id, best_feature, X[orders[start+max_row, best_feature], best_feature])
-                left_parents.append(node_id)
-                right_parents.append(node_id)
-                left_sizes.append(max_row+1)
-                right_sizes.append(size-max_row-1)
-                left_mask[orders[:, best_feature]
-                          [start:start+max_row+1]] = 1
-                right_mask[orders[:, best_feature]
-                           [start+max_row+1:end]] = 1
+                max_row, best_feature, improvement = best_variance_improvements(
+                    ys, start, end, weights)
+                #max_row, best_feature, improvement =  best_row_and_feature(diff, max_features, start, end)
+                if improvement <= min_improvement:
+                    if weight is None:
+                        tree.add_leaf(node_id, np.mean(ys[start:end, 0]))
+                    else:
+                        tree.add_leaf(node_id, np.sum(
+                            ys[start:end, 0])/np.sum(weights[start:end, 0]))
+
+                    continue
+                else:
+                    tree.add_binary(
+                        node_id, best_feature, X[orders[start+max_row, best_feature], best_feature])
+                    left_parents.append(node_id)
+                    right_parents.append(node_id)
+                    left_sizes.append(max_row+1)
+                    right_sizes.append(size-max_row-1)
+                    left_mask[orders[:, best_feature]
+                              [start:start+max_row+1]] = 1
+                    right_mask[orders[:, best_feature]
+                               [start+max_row+1:end]] = 1
 
         sizes = left_sizes+right_sizes
         parents = left_parents+right_parents
