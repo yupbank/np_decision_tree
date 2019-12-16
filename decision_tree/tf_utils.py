@@ -104,7 +104,8 @@ def split_level(tree, x, y, min_sample_leaf, max_depth, min_improvement, depth, 
          initial_right_size,
          initial_left_mask,
          initial_right_mask,
-         )
+         ),
+        back_prop=False
     )
     left_orders = tf.reshape(tf.boolean_mask(
         tf.gather(left_mask, orders), orders), (-1, orders.shape[1]))

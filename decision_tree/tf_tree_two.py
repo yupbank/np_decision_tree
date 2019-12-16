@@ -32,7 +32,7 @@ def init_tree(max_node):
                 tf.get_variable('value', initializer=value, use_resource=True))
 
 
-def tf_tree(X, y, max_depth=2, min_improvement=1e-7, min_sample_leaf=1):
+def tf_tree(X, y, max_depth=5, min_improvement=1e-7, min_sample_leaf=1):
     tree_variable = init_tree(max_depth)
 
     init_depth = tf.constant(0)
