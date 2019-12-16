@@ -68,6 +68,7 @@ def best_ratio_improvments(ys):
     total_sum = ys[-1][-1]
     mean = total_sum/size
     ps = ys[:-1]/total_sum
+    q = np.arange(1, size)/size
     qs = np.tile(q, feature_size).reshape(feature_size, -1).T
     values = np.square(ps-qs)*np.reciprocal(qs*(1-qs))
 
