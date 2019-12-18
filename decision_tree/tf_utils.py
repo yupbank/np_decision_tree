@@ -51,17 +51,25 @@ def argmax_2d(tensor):
 def normalize(ys):
     return ys/tf.reduce_sum(ys, axis=0, keepdims=True)
 
-
-def best_variance_improvements(ys, weight=None):
-    op = tf.assert_greater(tf.shape(ys)[0], 1)
-    with tf.control_dependencies([op]):
-        weight = weight or tf.ones_like(ys[:, 0])
+ def best_variance_improvements(ys, weight=None):
+    def calcluate():
+        new_weight = weight or tf.ones_like(ys[:, 0])
         x = normalize(ys)[:-1, :]
-        weight = normalize(weight)[:-1]
-        y = x**2/weight[:, tf.newaxis] + (1-x)**2/(1-weight[:, tf.newaxis])
+        new_weight = normalize(new_weight)[:-1]
+        y = x**2/new_weight[:, tf.newaxis] + \
+            (1-x)**2/(1-new_weight[:, tf.newaxis])
         max_row, max_col = argmax_2d(y)
         max_value = y[max_row, max_col]
         return max_row, max_col, max_value
+
+    return tf.cond(tf.less_equal(tf.shape(ys)[0], 1),
+                   lambda: (0, 0, tf.constant(0.0, dtype=tf.float64)),
+                   calcluate)
+
+def populate_mask(prev_mask, new_indices):
+    return tf.tensor_scatter_nd_add(
+        prev_mask, new_indices,
+        tf.ones_like(new_indices[:, 0], dtype=prev_mask.dtype))
 
 
 def slice_order_by_mask(orders, mask):
@@ -87,41 +95,37 @@ class DecisionTree(object):
         with tf.control_dependencies([ops]):
             return node_id+1
 
-    def add_leaf(self, ys, node_id, start, size, left_mask, right_mask):
+    def add_leaf(self, ys, node_id, start, size):
         y = ys[start:start+size, 0]
-        ops = self.tree_.value[node_id].assign(tf.reduce_mean(y))
-        with tf.control_dependencies([ops]):
-            return node_id, tf.constant(0), tf.constant(0), left_mask, right_mask
+        return self.tree_.value[node_id].assign(tf.reduce_mean(y))
 
-    def add_binary_split(self, orders, best_row, best_col, node_id, start, size, left_mask, right_mask):
-        assert_op = tf.assert_greater(size-1, best_row)
-        with tf.control_dependencies([assert_op]):
-            left_mask = tf.tensor_scatter_nd_add(
-                left_mask, orders[start:start+best_row+1, best_col:best_col+1],
-                tf.ones_like(orders[start:start+best_row+1, best_col], dtype=left_mask.dtype))
-            right_mask = tf.tensor_scatter_nd_add(
-                right_mask, orders[start+best_row +
-                                   1:start+size, best_col:best_col+1],
-                tf.ones_like(orders[start+best_row+1:start+size, best_col], dtype=right_mask.dtype))
-            # todo: get real threshold
-            add_threshold_ops = self.tree_.threshold[node_id].assign(
-                tf.cast(best_row, tf.float64))
-            add_feature_ops = self.tree_.feature[node_id].assign(best_col)
-            with tf.control_dependencies([add_threshold_ops, add_feature_ops]):
-                return node_id, best_row+1, size - best_row-1, left_mask, right_mask
+    def add_binary_split(self, x, orders, best_row, best_col, node_id, start, size):
+        add_threshold_ops = self.tree_.threshold[node_id].assign(
+            x[orders[start+best_row, best_col], best_col])
+        add_feature_ops = self.tree_.feature[node_id].assign(best_col)
+        return tf.group(add_threshold_ops, add_feature_ops)
 
-    def try_split(self, ys, orders, node_id, start, size, left_mask, right_mask):
-        assert_op = tf.assert_greater(
-            size, tf.constant(1), message="size too small")
-        #[40 29], 19, 34
-        with tf.control_dependencies([assert_op]):
-            best_row, best_col, improvement = best_variance_improvements(
-                ys[start:start+size])
-            return tf.cond(
-                improvement <= self.min_improvement,
-                partial(self.add_leaf, ys, node_id, start,
-                        size, left_mask, right_mask),
-                partial(self.add_binary_split, orders, best_row, best_col, node_id, start, size, left_mask, right_mask))
+    def try_split(self, x, ys, depth, orders, node_id, start, size, left_sizes, right_sizes, left_mask, right_mask):
+        best_row, best_col, improvement, new_left_sizes, new_right_sizes, new_left_mask, new_right_mask = self.split_data(
+            ys, orders, start, size, left_sizes, right_sizes, left_mask, right_mask)
+        def new_leaf():
+            ops = self.add_leaf(ys, node_id, start, size)
+            with tf.control_dependencies([ops]):
+                return left_sizes, right_sizes, left_mask, right_mask
+
+        def new_split():
+            ops = self.add_binary_split(
+                x, orders, best_row, best_col, node_id, start, size)
+            with tf.control_dependencies([ops]):
+                return new_left_sizes, new_right_sizes, new_left_mask, new_right_mask
+
+        return tf.cond(
+            tf.logical_or(
+                tf.logical_or(
+                    tf.less_equal(improvement, self.min_improvement),
+                    tf.less_equal(size, self.min_sample_leaf)),
+                tf.less_equal(self.max_depth, depth)),
+            new_leaf, new_split)
 
     def split_block(self, parents, sizes, is_left, depth, ys, orders,
                     prev_counter, prev_end, prev_node_id, prev_new_parent,
@@ -154,56 +158,101 @@ class DecisionTree(object):
                 )
 
     def split_level(self, x, y, depth, node_id, parents, orders, sizes, is_left=False):
-        ys = tf.gather(y, orders)
         initial_counter = 0
         initial_prev_end = 0
-        result_parents = tf.constant([], dtype=tf.int32)
-        result_left_sizes = tf.constant([], dtype=tf.int32)
-        result_right_sizes = tf.constant([], dtype=tf.int32)
-        result_left_mask = tf.zeros_like(y, dtype=tf.int32)
-        result_right_mask = tf.zeros_like(y, dtype=tf.int32)
+        initial_new_parents = tf.constant([], dtype=tf.int32)
+        initial_left_sizes = tf.constant([], dtype=tf.int32)
+        initial_right_sizes = tf.constant([], dtype=tf.int32)
+        initial_left_mask = tf.zeros_like(y, dtype=tf.int32)
+        initial_right_mask = tf.zeros_like(y, dtype=tf.int32)
+
+        ys = tf.gather(y, orders)
 
         def condition(counter, *_):
-            return tf.logical_and(0 < (tf.shape(sizes)[0]), counter+1 <= tf.shape(sizes)[0])
+            return tf.less_equal(counter, tf.shape(sizes)[0]-1)
 
-        res = tf.while_loop(
-            condition,
-            partial(self.split_block, parents, sizes, is_left,
-                    depth, ys, orders),
-            (
-                initial_counter,
-                initial_prev_end,
-                node_id,
-                result_parents,
-                result_left_sizes,
-                result_right_sizes,
-                result_left_mask,
-                result_right_mask,
-            ),
-            (
-                tf.TensorShape([]),
-                tf.TensorShape([]),
-                tf.TensorShape([]),
-                tf.TensorShape([None]),
-                tf.TensorShape([None]),
-                tf.TensorShape([None]),
-                result_left_mask.shape,
-                result_right_mask.shape,
-            ),
-            back_prop=False,
-        )
-        with tf.control_dependencies(res):
-            x, c, node_id, result_parents, result_left_sizes, result_right_sizes, result_left_mask, result_right_mask = res
-            left_orders = slice_order_by_mask(orders, result_left_mask)
-            right_orders = slice_order_by_mask(orders, result_right_mask)
+        def func(prev_counter, prev_end, prev_node_id, prev_new_parent, prev_left_sizes, prev_right_sizes, prev_left_mask, prev_right_mask):
+            parent, size = parents[prev_counter], sizes[prev_counter]
+            new_parents = tf.concat([prev_new_parent, [prev_node_id]], axis=0)
+            start, end = prev_end, prev_end+size
+            left_sizes, right_sizes, left_mask, right_mask = self.try_split(x, ys, depth, orders, prev_node_id, start, size,
+                                                                            prev_left_sizes, prev_right_sizes,
+                                                                            prev_left_mask, prev_right_mask)
+            node_id = self.new_node(prev_node_id, parent, is_left)
             return (
+                prev_counter+1,
+                end,
                 node_id,
-                tf.boolean_mask(result_parents, result_left_sizes > 0),
-                tf.boolean_mask(result_left_sizes, result_left_sizes > 0),
-                tf.boolean_mask(result_right_sizes, result_right_sizes > 0),
-                left_orders,
-                right_orders
+                new_parents,
+                left_sizes,
+                right_sizes,
+                left_mask,
+                right_mask
             )
+
+        _, _, node_id, new_parents, left_sizes, right_sizes, left_mask, right_mask = tf.while_loop(
+            condition,
+            func,
+             (
+                 initial_counter,
+                 initial_prev_end,
+                 node_id,
+                initial_new_parents,
+                initial_left_sizes,
+                initial_right_sizes,
+                initial_left_mask,
+                initial_right_mask,
+             ),
+             (
+                 tf.TensorShape([]),
+                 tf.TensorShape([None]),
+                 tf.TensorShape([None]),
+                 tf.TensorShape([None]),
+                initial_left_mask.shape,
+                initial_right_mask.shape,
+             ),
+             back_prop=False,
+         )
+        left_orders = slice_order_by_mask(orders, left_mask)
+        right_orders = slice_order_by_mask(orders, right_mask)
+        return (
+            tf.concat([new_parents, new_parents], axis=0),
+            left_sizes,
+            right_sizes,
+            left_orders,
+            right_orders
+        )
+
+    @staticmethod
+    def split_data(ys, orders, start, size, left_sizes, right_sizes, left_mask, right_mask):
+        best_row, best_col, improvement = best_variance_improvements(
+            ys[start:start+size])
+        new_left_mask = populate_mask(
+            left_mask, orders[start:start+best_row+1, best_col:best_col+1])
+        new_right_mask = populate_mask(
+            right_mask, orders[start+best_row+1:start+size, best_col:best_col+1])
+        new_left_sizes = tf.concat([left_sizes, [best_row+1]], axis=0)
+        new_right_sizes = tf.concat(
+            [right_sizes, [size-best_row-1]], axis=0)
+        return best_row, best_col, improvement, new_left_sizes, new_right_sizes, new_left_mask, new_right_mask
+
+    def first_split(self, X, y):
+        start, size = 0, tf.shape(X)[0]
+        orders = tf.argsort(X, axis=0)
+        left_mask = tf.zeros_like(y, dtype=tf.int32)
+        right_mask = tf.zeros_like(y, dtype=tf.int32)
+        left_sizes = tf.constant([], dtype=tf.int32)
+        right_sizes = tf.constant([], dtype=tf.int32)
+        ys = tf.gather(y, orders)
+        best_row, best_col, improvement, new_left_sizes, new_right_sizes, new_left_mask, new_right_mask = self.split_data(
+            ys, orders, start, size, left_sizes, right_sizes, left_mask, right_mask)
+
+        return tf.cond(improvement > self.min_improvement,
+                       lambda: (new_left_sizes, new_right_sizes,
+                                slice_order_by_mask(orders, new_left_mask), slice_order_by_mask(orders, new_right_mask)),
+                       lambda: (left_sizes, right_sizes,
+                                slice_order_by_mask(orders, left_mask), slice_order_by_mask(orders, right_mask))
+                       )
 
     def depth_split(self,
                     x,
